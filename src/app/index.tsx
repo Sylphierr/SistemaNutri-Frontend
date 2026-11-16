@@ -1,98 +1,74 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { obtenerReporte } from '../services/api';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+export default function DashboardScreen() {
+  const [reporte, setReporte] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+  const USUARIO_ID = 1;
+
+  // useFocusEffect recarga los datos cada vez que la pantalla vuelve a estar activa
+  useFocusEffect(
+    useCallback(() => {
+      cargarDatos();
+    }, [])
   );
-}
 
-export default function HomeScreen() {
+  const cargarDatos = async () => {
+    setLoading(true);
+    try {
+      const data = await obtenerReporte(USUARIO_ID, 'calorias');
+      setReporte(data);
+    } catch (error) {
+      console.error("Error al cargar el reporte:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={styles.container}>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+        </View>
+      ) : (
+        <>
+          <Text style={styles.title}>Resumen del Día</Text>
+          {reporte && (
+            <View style={styles.card}>
+              <Text style={styles.usuario}>Hola, {reporte.usuario}</Text>
+              <Text style={styles.resultado}>
+                {reporte.resultado['Total de Calorías (kcal)']} kcal
+              </Text>
+              <Text style={styles.subtitle}>Consumidas hoy</Text>
+            </View>
+          )}
+        </>
+      )}
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      {/* Botón para navegar a la pantalla de registro usando Expo Router */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/registro')}
+      >
+        <Text style={styles.fabText}>+ Registrar Comida</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  container: { flex: 1, padding: 20, backgroundColor: '#f5f5f5' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: '#333' },
+  card: { backgroundColor: '#fff', padding: 20, borderRadius: 15, alignItems: 'center', elevation: 5 },
+  usuario: { fontSize: 18, color: '#666', marginBottom: 10 },
+  resultado: { fontSize: 36, fontWeight: '900', color: '#4CAF50' },
+  subtitle: { fontSize: 14, color: '#999', marginTop: 5 },
+  fab: { position: 'absolute', bottom: 30, right: 20, left: 20, backgroundColor: '#4CAF50', padding: 15, borderRadius: 10, alignItems: 'center', elevation: 5 },
+  fabText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
 });
