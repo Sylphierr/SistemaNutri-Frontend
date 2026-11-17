@@ -10,7 +10,7 @@ export default function Layout() {
       }}
     >
       {/* index hace referencia a index.tsx */}
-      <Stack.Screen name="index" options={{ title: 'SISTEMA NUTRI' }} />
+      <Stack.Screen name="index" options={{ title: 'KEEP IT HEALTHY' }} />
 
       {/* registro hará referencia a registro.tsx (que crearemos en el siguiente paso) */}
       <Stack.Screen name="registro" options={{ title: 'Nuevo Registro' }} />

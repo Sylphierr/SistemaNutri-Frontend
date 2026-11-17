@@ -30,4 +30,9 @@ export const obtenerReporte = async (
         params: { tipo }
     });
     return response.data;
-}; 
+};
+
+export const crearAlimentoPersonalizado = async (nombre: string, grupo: string) => {
+    const response = await api.post('/consumo/alimento/personalizado', { nombre, grupo });
+    return response.data;
+};
