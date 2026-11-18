@@ -15,6 +15,7 @@ import {
     registrarConsumo,
     crearAlimentoPersonalizado,
     obtenerCatalogoAlimentos,
+    IngredientePorcion,
 } from '../services/api';
 
 interface AlimentoCatalogo {
@@ -31,16 +32,16 @@ export default function RegistroScreen() {
     const [cargandoCatalogo, setCargandoCatalogo] = useState<boolean>(true);
     const [seleccionados, setSeleccionados] = useState<string[]>([]);
 
-    // Estados de los patrones Composite, Factory y Decorator
-    const [listaAlimentos, setListaAlimentos] = useState<string[]>([]);
+    // Estados de los patrones Composite, Factory y Decorator (con porciones en gramos)
+    const [listaAlimentos, setListaAlimentos] = useState<IngredientePorcion[]>([]);
     const [esVegano, setEsVegano] = useState<boolean>(false);
-    const [tipoPlatillo, setTipoPlatillo] = useState<'desayuno' | 'comida'>('comida');
+    const [tipoPlatillo, setTipoPlatillo] = useState<'desayuno' | 'comida' | 'cena' | 'merienda'>('comida');
     const [loading, setLoading] = useState<boolean>(false);
 
     // Estados para el desplegable "Crear alimento personalizado"
     const [mostrarCreador, setMostrarCreador] = useState<boolean>(false);
     const [nuevoNombre, setNuevoNombre] = useState<string>('');
-    const [nuevoGrupo, setNuevoGrupo] = useState<'Proteina' | 'Fruta' | 'Verdura'>('Proteina');
+    const [nuevoGrupo, setNuevoGrupo] = useState<'Proteina' | 'Fruta' | 'Verdura' | 'Leguminosa'>('Proteina');
     const [creandoAlimento, setCreandoAlimento] = useState<boolean>(false);
 
     const router = useRouter();
@@ -75,14 +76,29 @@ export default function RegistroScreen() {
         );
     };
 
-    // Pasar los checkboxes marcados a la lista final del platillo (Composite)
+    // Pasar los checkboxes marcados a la lista final del platillo (Composite + PorcionDecorator 100g base)
     const agregarSeleccionadosAlPlatillo = () => {
         if (seleccionados.length === 0) {
             Alert.alert('Aviso', 'Selecciona al menos un ingrediente del catálogo.');
             return;
         }
-        setListaAlimentos((prev) => [...prev, ...seleccionados]);
+        const nuevosIngredientes: IngredientePorcion[] = seleccionados.map((nombre) => ({
+            nombre,
+            gramos: 100,
+        }));
+        setListaAlimentos((prev) => [...prev, ...nuevosIngredientes]);
         setSeleccionados([]);
+    };
+
+    // Stepper rápido (+/-) para ajustar los gramos de un ingrediente
+    const cambiarGramos = (index: number, delta: number) => {
+        setListaAlimentos((prev) =>
+            prev.map((item, idx) => {
+                if (idx !== index) return item;
+                const nuevosGramos = Math.max(10, item.gramos + delta);
+                return { ...item, gramos: nuevosGramos };
+            })
+        );
     };
 
     const eliminarIngrediente = (index: number) => {
@@ -103,9 +119,9 @@ export default function RegistroScreen() {
             await crearAlimentoPersonalizado(nombreLimpio, nuevoGrupo);
             Alert.alert('¡Catálogo Actualizado!', `Agregamos "${nombreLimpio}" como ${nuevoGrupo}.`);
 
-            // Recargamos el catálogo y lo añadimos también al platillo actual
+            // Recargamos el catálogo y lo añadimos también al platillo actual con 100g por defecto
             await cargarCatalogo();
-            setListaAlimentos((prev) => [...prev, nombreLimpio]);
+            setListaAlimentos((prev) => [...prev, { nombre: nombreLimpio, gramos: 100 }]);
 
             setNuevoNombre('');
             setMostrarCreador(false);
@@ -125,7 +141,6 @@ export default function RegistroScreen() {
         setLoading(true);
         try {
             const respuesta = await registrarConsumo({
-                usuario_id: 1,
                 alimentos: listaAlimentos,
                 es_vegano: esVegano,
                 tipo_platillo: tipoPlatillo,
@@ -144,26 +159,31 @@ export default function RegistroScreen() {
         <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
             <Text style={styles.title}>Armar Platillo</Text>
 
-            {/* 1. Selector superior para el Patrón Factory ("Desayuno" o "Comida") */}
-            <Text style={styles.sectionLabel}>1. Tipo de comida (Factory)</Text>
-            <View style={styles.selectorContainer}>
-                <TouchableOpacity
-                    style={[styles.tabButton, tipoPlatillo === 'desayuno' && styles.tabActivo]}
-                    onPress={() => setTipoPlatillo('desayuno')}
-                >
-                    <Text style={[styles.tabText, tipoPlatillo === 'desayuno' && styles.tabTextActivo]}>
-                        Desayuno
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tabButton, tipoPlatillo === 'comida' && styles.tabActivo]}
-                    onPress={() => setTipoPlatillo('comida')}
-                >
-                    <Text style={[styles.tabText, tipoPlatillo === 'comida' && styles.tabTextActivo]}>
-                        Comida
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            {/* 1. Selector superior para el Patrón Factory (Desayuno, Comida, Cena, Merienda) */}
+            <Text style={styles.sectionLabel}>1. Tipo de comida</Text>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.horizontalScroll}
+                contentContainerStyle={styles.selectorContainer}
+            >
+                {([
+                    { key: 'desayuno', label: 'Desayuno' },
+                    { key: 'comida', label: 'Comida' },
+                    { key: 'cena', label: 'Cena' },
+                    { key: 'merienda', label: 'Merienda' },
+                ] as const).map((opcion) => (
+                    <TouchableOpacity
+                        key={opcion.key}
+                        style={[styles.tabButton, tipoPlatillo === opcion.key && styles.tabActivo]}
+                        onPress={() => setTipoPlatillo(opcion.key)}
+                    >
+                        <Text style={[styles.tabText, tipoPlatillo === opcion.key && styles.tabTextActivo]}>
+                            {opcion.label}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
 
             {/* 2. Catálogo con Checkboxes para armar el Patrón Composite */}
             <View style={styles.sectionHeaderRow}>
@@ -209,7 +229,7 @@ export default function RegistroScreen() {
                                             <Text style={styles.checkboxMeta}>
                                                 {etiquetaGrupo ? `${etiquetaGrupo}` : ''}
                                                 {etiquetaGrupo && item.calorias !== undefined ? ' • ' : ''}
-                                                {item.calorias !== undefined ? `${item.calorias} kcal` : ''}
+                                                {item.calorias !== undefined ? `${Number(Number(item.calorias).toFixed(1))} kcal` : ''}
                                             </Text>
                                         )}
                                     </View>
@@ -251,8 +271,13 @@ export default function RegistroScreen() {
                         value={nuevoNombre}
                         onChangeText={setNuevoNombre}
                     />
-                    <View style={styles.selectorContainer}>
-                        {(['Proteina', 'Fruta', 'Verdura'] as const).map((grupo) => (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.horizontalScroll}
+                        contentContainerStyle={styles.selectorContainer}
+                    >
+                        {(['Proteina', 'Fruta', 'Verdura', 'Leguminosa'] as const).map((grupo) => (
                             <TouchableOpacity
                                 key={grupo}
                                 style={[styles.tabButton, nuevoGrupo === grupo && styles.tabActivo]}
@@ -263,7 +288,7 @@ export default function RegistroScreen() {
                                 </Text>
                             </TouchableOpacity>
                         ))}
-                    </View>
+                    </ScrollView>
                     <TouchableOpacity
                         style={styles.crearButton}
                         onPress={handleCrearPersonalizado}
@@ -278,20 +303,41 @@ export default function RegistroScreen() {
                 </View>
             )}
 
-            {/* Lista Final del Platillo (Patrón Composite) */}
+            {/* Lista Final del Platillo (Patrón Composite + PorcionDecorator) */}
             <Text style={styles.sectionLabel}>
                 3. Ingredientes en tu Platillo ({listaAlimentos.length})
             </Text>
             <View style={styles.listaContainer}>
                 {listaAlimentos.map((item, index) => (
-                    <View key={`${item}-${index}`} style={styles.ingredienteItem}>
-                        <Text style={styles.ingredienteText}>• {item}</Text>
-                        <TouchableOpacity
-                            onPress={() => eliminarIngrediente(index)}
-                            style={styles.deleteBtn}
-                        >
-                            <Text style={styles.deleteText}>✕</Text>
-                        </TouchableOpacity>
+                    <View key={`${item.nombre}-${index}`} style={styles.ingredienteItem}>
+                        <Text style={styles.ingredienteText} numberOfLines={1}>
+                            • {item.nombre}
+                        </Text>
+
+                        <View style={styles.stepperWrapper}>
+                            <TouchableOpacity
+                                style={styles.stepperBtn}
+                                onPress={() => cambiarGramos(index, -25)}
+                            >
+                                <Text style={styles.stepperBtnText}>−</Text>
+                            </TouchableOpacity>
+
+                            <Text style={styles.stepperValue}>{item.gramos}g</Text>
+
+                            <TouchableOpacity
+                                style={styles.stepperBtn}
+                                onPress={() => cambiarGramos(index, 25)}
+                            >
+                                <Text style={styles.stepperBtnText}>+</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => eliminarIngrediente(index)}
+                                style={styles.deleteBtn}
+                            >
+                                <Text style={styles.deleteText}>✕</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ))}
                 {listaAlimentos.length === 0 && (
@@ -304,8 +350,7 @@ export default function RegistroScreen() {
             {/* 4. Switch para el Patrón Decorator ("¿Versión Vegana?") */}
             <View style={styles.switchContainer}>
                 <View>
-                    <Text style={styles.switchLabel}>¿Versión Vegana?</Text>
-                    <Text style={styles.switchSubLabel}>Aplica VeganoDecorator al platillo</Text>
+                    <Text style={styles.switchLabel}>Platillo Vegano</Text>
                 </View>
                 <Switch
                     value={esVegano}
@@ -365,17 +410,24 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: 8,
     },
-    selectorContainer: {
-        flexDirection: 'row',
-        backgroundColor: '#e2e6e4',
-        borderRadius: 10,
-        padding: 4,
+    horizontalScroll: {
         marginBottom: 18,
     },
-    tabButton: {
-        flex: 1,
-        paddingVertical: 10,
+    selectorContainer: {
+        flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#e2e6e4',
+        borderRadius: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 6,
+    },
+    tabButton: {
+        minWidth: 105,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        marginHorizontal: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
         borderRadius: 8,
     },
     tabActivo: {
@@ -542,13 +594,44 @@ const styles = StyleSheet.create({
         borderBottomColor: '#f0f0f0',
     },
     ingredienteText: {
+        flex: 1,
         fontSize: 15,
         color: '#333',
         fontWeight: '500',
+        marginRight: 8,
+    },
+    stepperWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    stepperBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        backgroundColor: '#e8f5e9',
+        borderWidth: 1,
+        borderColor: '#4CAF50',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    stepperBtnText: {
+        color: '#2e7d32',
+        fontSize: 16,
+        fontWeight: 'bold',
+        lineHeight: 18,
+    },
+    stepperValue: {
+        minWidth: 48,
+        textAlign: 'center',
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#333',
+        marginHorizontal: 4,
     },
     deleteBtn: {
         paddingHorizontal: 8,
         paddingVertical: 2,
+        marginLeft: 4,
     },
     deleteText: {
         color: '#e53935',
