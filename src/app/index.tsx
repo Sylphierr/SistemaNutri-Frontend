@@ -11,7 +11,13 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { obtenerReporte, actualizarObjetivo } from '../services/api';
+import {
+  obtenerReporte,
+  actualizarObjetivo,
+  obtenerPerfil,
+  actualizarPerfil,
+  logout,
+} from '../services/api';
 
 type TipoEstrategia = 'calorias' | 'macros' | 'azucar_sodio';
 
@@ -26,28 +32,87 @@ export default function DashboardScreen() {
   const [metaProteinaInput, setMetaProteinaInput] = useState('');
   const [guardandoMeta, setGuardandoMeta] = useState(false);
 
+  // Estados para editar Datos Personales del usuario
+  const [mostrarPerfil, setMostrarPerfil] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [edadInput, setEdadInput] = useState('');
+  const [pesoInput, setPesoInput] = useState('');
+  const [alturaInput, setAlturaInput] = useState('');
+  const [telefonoInput, setTelefonoInput] = useState('');
+  const [preferenciasInput, setPreferenciasInput] = useState('');
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+
   const router = useRouter();
 
   // Recarga los datos cuando la pantalla entra en foco O cuando cambia la estrategia
   useFocusEffect(
     useCallback(() => {
-      cargarDatos();
+      verificarRolYCargar();
     }, [estrategiaActiva])
   );
+
+  const verificarRolYCargar = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    if (!token) {
+      router.replace('/login' as any);
+      return;
+    }
+    const rol = await AsyncStorage.getItem('userRole');
+    if (rol === 'admin') {
+      router.replace('/admin' as any);
+      return;
+    }
+    if (rol === 'doctor') {
+      router.replace('/doctor' as any);
+      return;
+    }
+    await cargarDatos();
+  };
 
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const data = await obtenerReporte(estrategiaActiva);
+      const [data, perfil] = await Promise.all([
+        obtenerReporte(estrategiaActiva),
+        obtenerPerfil(),
+      ]);
       setReporte(data);
       if (data?.objetivo) {
         setMetaCaloriasInput(String(data.objetivo.calorias_meta));
         setMetaProteinaInput(String(data.objetivo.proteina_meta));
       }
+      if (perfil) {
+        setEmailInput(perfil.email || '');
+        setEdadInput(perfil.edad != null ? String(perfil.edad) : '');
+        setPesoInput(perfil.peso_kg != null ? String(perfil.peso_kg) : '');
+        setAlturaInput(perfil.altura_cm != null ? String(perfil.altura_cm) : '');
+        setTelefonoInput(perfil.telefono || '');
+        setPreferenciasInput(perfil.preferencias || '');
+      }
     } catch (error) {
       console.error("Error al cargar el reporte:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuardarPerfil = async () => {
+    setGuardandoPerfil(true);
+    try {
+      await actualizarPerfil({
+        email: emailInput.trim(),
+        edad: edadInput ? parseInt(edadInput, 10) : null,
+        peso_kg: pesoInput ? parseFloat(pesoInput) : null,
+        altura_cm: alturaInput ? parseFloat(alturaInput) : null,
+        telefono: telefonoInput.trim(),
+        preferencias: preferenciasInput.trim(),
+      });
+      setMostrarPerfil(false);
+      Alert.alert('¡Listo!', 'Tus datos personales han sido actualizados.');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.error || 'No se pudieron guardar tus datos');
+    } finally {
+      setGuardandoPerfil(false);
     }
   };
 
@@ -73,7 +138,7 @@ export default function DashboardScreen() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('userToken');
+    await logout();
     router.replace('/login' as any);
   };
 
@@ -219,19 +284,121 @@ export default function DashboardScreen() {
           <View style={styles.headerRow}>
             <Text style={styles.title}>Resumen del Día</Text>
             <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.editGoalBtn}
-                onPress={() => setMostrarEditorMeta(!mostrarEditorMeta)}
-              >
-                <Text style={styles.editGoalBtnText}>
-                  {mostrarEditorMeta ? 'Cerrar Meta' : '⚙ Meta'}
-                </Text>
-              </TouchableOpacity>
               <TouchableOpacity onPress={handleLogout}>
                 <Text style={styles.logoutText}>Cerrar Sesión</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.editGoalBtn}
+              onPress={() => {
+                setMostrarEditorMeta(!mostrarEditorMeta);
+                setMostrarPerfil(false);
+              }}
+            >
+              <Text style={styles.editGoalBtnText}>
+                {mostrarEditorMeta ? 'Cerrar Meta' : '⚙ Meta'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.profileBtn}
+              onPress={() => {
+                setMostrarPerfil(!mostrarPerfil);
+                setMostrarEditorMeta(false);
+              }}
+            >
+              <Text style={styles.profileBtnText}>
+                {mostrarPerfil ? 'Cerrar Datos' : '👤 Mis Datos'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.doctorBtn}
+              onPress={() => router.push('/ayuda' as any)}
+            >
+              <Text style={styles.doctorBtnText}>🩺 Contactar Doctor</Text>
+            </TouchableOpacity>
+          </View>
+
+          {mostrarPerfil && (
+            <View style={styles.goalEditorCard}>
+              <Text style={styles.goalEditorTitle}>Mis Datos Personales</Text>
+              <View style={styles.goalInputsRow}>
+                <View style={styles.goalInputGroup}>
+                  <Text style={styles.goalInputLabel}>Email</Text>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={emailInput}
+                    onChangeText={setEmailInput}
+                    placeholder="correo@ejemplo.com"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <View style={styles.goalInputGroup}>
+                  <Text style={styles.goalInputLabel}>Teléfono</Text>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={telefonoInput}
+                    onChangeText={setTelefonoInput}
+                    placeholder="555-123-4567"
+                  />
+                </View>
+              </View>
+              <View style={styles.goalInputsRow}>
+                <View style={styles.goalInputGroup}>
+                  <Text style={styles.goalInputLabel}>Edad</Text>
+                  <TextInput
+                    style={styles.goalInput}
+                    keyboardType="numeric"
+                    value={edadInput}
+                    onChangeText={setEdadInput}
+                    placeholder="22"
+                  />
+                </View>
+                <View style={styles.goalInputGroup}>
+                  <Text style={styles.goalInputLabel}>Peso (kg)</Text>
+                  <TextInput
+                    style={styles.goalInput}
+                    keyboardType="numeric"
+                    value={pesoInput}
+                    onChangeText={setPesoInput}
+                    placeholder="70"
+                  />
+                </View>
+                <View style={styles.goalInputGroup}>
+                  <Text style={styles.goalInputLabel}>Altura (cm)</Text>
+                  <TextInput
+                    style={styles.goalInput}
+                    keyboardType="numeric"
+                    value={alturaInput}
+                    onChangeText={setAlturaInput}
+                    placeholder="175"
+                  />
+                </View>
+              </View>
+              <Text style={styles.goalInputLabel}>Preferencias</Text>
+              <TextInput
+                style={[styles.goalInput, { marginBottom: 12 }]}
+                value={preferenciasInput}
+                onChangeText={setPreferenciasInput}
+                placeholder="Ej. Dieta alta en proteína"
+              />
+              <TouchableOpacity
+                style={styles.saveGoalBtn}
+                onPress={handleGuardarPerfil}
+                disabled={guardandoPerfil}
+              >
+                {guardandoPerfil ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveGoalBtnText}>Guardar Datos Personales</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {mostrarEditorMeta && (
             <View style={styles.goalEditorCard}>
@@ -353,6 +520,38 @@ const styles = StyleSheet.create({
   },
   editGoalBtnText: {
     color: '#2e7d32',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  profileBtn: {
+    backgroundColor: '#f3e5f5',
+    borderWidth: 1,
+    borderColor: '#8e24aa',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+  },
+  profileBtnText: {
+    color: '#6a1b9a',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  doctorBtn: {
+    backgroundColor: '#e3f2fd',
+    borderWidth: 1,
+    borderColor: '#1976d2',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+  },
+  doctorBtnText: {
+    color: '#1565c0',
     fontSize: 13,
     fontWeight: 'bold',
   },
